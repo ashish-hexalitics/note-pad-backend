@@ -39,24 +39,33 @@ exports.getNote = async (req, res) => {
       note.collaborators.length > 0
         ? await Promise.all(
             note.collaborators.map(async (collaborator) => {
-              const user = await User.findById(collaborator.collaboratorId).select("-password");
+              const user = await User.findById(
+                collaborator.collaboratorId
+              ).select("-password");
               return {
                 ...collaborator.toObject(), // Keep collaborator data
-                name:user.name,
-                email:user.email // Add corresponding user data
+                name: user.name,
+                email: user.email, // Add corresponding user data
               };
             })
           )
         : [];
 
     // Respond with note data and populated collaborators
-    res.status(200).json({ data: { ...note.toObject(), collaborators } });
+    res
+      .status(200)
+      .json({
+        data: {
+          ...note.toObject(),
+          collaborators,
+          isOwner: note.owner.toString() === req.user.id,
+        },
+      });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Internal server error", error });
   }
 };
-
 
 // Get a note by shareable link
 exports.updateAndCreateNoteCollaborators = async (req, res) => {
@@ -79,7 +88,10 @@ exports.updateAndCreateNoteCollaborators = async (req, res) => {
     if (isOwner || isCollaborator) {
       return res
         .status(200)
-        .json({data: {note,collaborator:isCollaborator}, message: "User already a collaborator or owner" });
+        .json({
+          data: { note, collaborator: isCollaborator },
+          message: "User already a collaborator or owner",
+        });
     }
 
     const newCollaborator = await Collaborator.create({
@@ -94,7 +106,10 @@ exports.updateAndCreateNoteCollaborators = async (req, res) => {
     await note.save();
     res
       .status(200)
-      .json({ data: {note,collaborator:newCollaborator}, message: "Collaborator added successfully" });
+      .json({
+        data: { note, collaborator: newCollaborator },
+        message: "Collaborator added successfully",
+      });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Internal server error", error });
