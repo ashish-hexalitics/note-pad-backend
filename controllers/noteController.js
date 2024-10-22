@@ -1,4 +1,7 @@
 const Notes = require("../models/Notes");
+const Collaborator = require("../models/Collaborator");
+const User = require("../models/User");
+
 const { generateShareableLink } = require("../utils");
 
 // Create a note
@@ -23,30 +26,78 @@ exports.createNote = async (req, res) => {
 // Get a note by ID
 exports.getNote = async (req, res) => {
   const { noteId } = req.params;
+
   try {
-    const note = await Notes.findById(noteId);
+    // Find the note by its ID and populate collaborators
+    const note = await Notes.findById(noteId).populate("collaborators");
     if (!note) {
       return res.status(404).json({ message: "Note not found" });
     }
-    res.status(200).json({ data: note });
+
+    // Map through collaborators and retrieve user data, resolving all promises
+    const collaborators =
+      note.collaborators.length > 0
+        ? await Promise.all(
+            note.collaborators.map(async (collaborator) => {
+              const user = await User.findById(collaborator.collaboratorId).select("-password");
+              return {
+                ...collaborator.toObject(), // Keep collaborator data
+                name:user.name,
+                email:user.email // Add corresponding user data
+              };
+            })
+          )
+        : [];
+
+    // Respond with note data and populated collaborators
+    res.status(200).json({ data: { ...note.toObject(), collaborators } });
   } catch (error) {
     console.error(error.message);
-    res.status(500).json(error);
+    res.status(500).json({ message: "Internal server error", error });
   }
 };
 
+
 // Get a note by shareable link
-exports.getNoteByLink = async (req, res) => {
-  const { sharedLink } = req.params;
+exports.updateAndCreateNoteCollaborators = async (req, res) => {
+  const { noteId } = req.params;
+
   try {
-    const note = await Notes.findOne({ sharedLink });
+    // Find the note by ID
+    const note = await Notes.findOne({ _id: noteId });
     if (!note) {
       return res.status(404).json({ message: "Note not found" });
     }
-    res.status(200).json({ data: note });
+
+    const isOwner = note.owner.toString() === req.user.id;
+    const isCollaborator = await Collaborator.findOne({
+      noteId,
+      ownerId: note.owner,
+      collaboratorId: req.user.id,
+    });
+
+    if (isOwner || isCollaborator) {
+      return res
+        .status(200)
+        .json({data: {note,collaborator:isCollaborator}, message: "User already a collaborator or owner" });
+    }
+
+    const newCollaborator = await Collaborator.create({
+      noteId,
+      ownerId: note.owner,
+      collaboratorId: req.user.id,
+    });
+    newCollaborator.save();
+
+    note.collaborators.push(newCollaborator._id);
+
+    await note.save();
+    res
+      .status(200)
+      .json({ data: {note,collaborator:newCollaborator}, message: "Collaborator added successfully" });
   } catch (error) {
     console.error(error.message);
-    res.status(500).json(error);
+    res.status(500).json({ message: "Internal server error", error });
   }
 };
 

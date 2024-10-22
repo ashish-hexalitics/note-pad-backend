@@ -18,6 +18,7 @@ const collaboratorSchema = new Schema(
     permission: {
       type: String,
       enum: ['edit', 'delete', 'view'],
+      default:'view'
     },
   },
   { timestamps: true }
