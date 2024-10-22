@@ -9,8 +9,9 @@ exports.createNote = async (req, res) => {
       content,
       title,
       owner,
-      sharedLink: generateShareableLink(),
+      sharedLink: "",
     });
+    newNote.sharedLink = `/user/invitaion-note/${newNote._id}`;
     await newNote.save();
     res.status(201).json({ data: newNote });
   } catch (error) {
@@ -53,21 +54,35 @@ exports.getNoteByLink = async (req, res) => {
 exports.updateNote = async (req, res) => {
   const { noteId } = req.params;
   const { content, collaborators } = req.body;
+
   try {
-    const note = await Notes.findById(noteId);
-    if (!note) {
+    // Check if the note exists
+    const isNote = await Notes.findById(noteId);
+    if (!isNote) {
       return res.status(404).json({ message: "Note not found" });
     }
 
-    // Update note content or collaborators
-    if (content) note.content = content;
-    if (collaborators) note.collaborators = collaborators;
+    // Update note content or collaborators if provided
+    const updatedData = {
+      content: content || isNote.content,
+      collaborators: collaborators || isNote.collaborators,
+    };
 
-    await note.save();
-    res.status(200).json({ data: note });
+    // Find and update the note, return the updated document
+    const updatedNote = await Notes.findOneAndUpdate(
+      { _id: noteId },
+      updatedData,
+      { new: true } // Returns the updated note
+    );
+
+    if (!updatedNote) {
+      return res.status(404).json({ message: "Failed to update the note" });
+    }
+
+    res.status(200).json({ data: updatedNote });
   } catch (error) {
-    console.error(error.message);
-    res.status(500).json(error);
+    console.error("Error updating note:", error.message);
+    res.status(500).json({ error: "Internal Server Error" });
   }
 };
 
@@ -75,13 +90,25 @@ exports.updateNote = async (req, res) => {
 exports.deleteNote = async (req, res) => {
   const { noteId } = req.params;
   try {
-    const note = await Notes.findById(noteId);
+    const note = await Notes.findByIdAndDelete({ _id: noteId });
     if (!note) {
       return res.status(404).json({ message: "Note not found" });
     }
 
-    await note.remove();
     res.status(200).json({ message: "Note deleted" });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json(error);
+  }
+};
+
+// Get a note by ID
+exports.getNotesByUserId = async (req, res) => {
+  const { userId } = req.params;
+  try {
+    const note = await Notes.find({ owner: userId });
+
+    res.status(200).json({ data: note });
   } catch (error) {
     console.error(error.message);
     res.status(500).json(error);

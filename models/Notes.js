@@ -19,7 +19,7 @@ const noteSchema = new Schema(
     collaborators: [
       {
         type: Schema.Types.ObjectId,
-        ref: "User",
+        ref: "collaborator",
       },
     ],
     sharedLink: {
