@@ -20,6 +20,11 @@ const collaboratorSchema = new Schema(
       enum: ['edit', 'delete', 'view'],
       default:'view'
     },
+    status: {
+      type: String,
+      enum: ['pending', 'accept'],
+      default:'pending'
+    },
   },
   { timestamps: true }
 );

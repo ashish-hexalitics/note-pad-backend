@@ -52,15 +52,13 @@ exports.getNote = async (req, res) => {
         : [];
 
     // Respond with note data and populated collaborators
-    res
-      .status(200)
-      .json({
-        data: {
-          ...note.toObject(),
-          collaborators,
-          isOwner: note.owner.toString() === req.user.id,
-        },
-      });
+    res.status(200).json({
+      data: {
+        ...note.toObject(),
+        collaborators,
+        isOwner: note.owner.toString() === req.user.id,
+      },
+    });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Internal server error", error });
@@ -70,6 +68,9 @@ exports.getNote = async (req, res) => {
 // Get a note by shareable link
 exports.updateAndCreateNoteCollaborators = async (req, res) => {
   const { noteId } = req.params;
+  const { collaboratorId, permission } = req.body;
+
+  const collabId = collaboratorId ? collaboratorId : req.user.id;
 
   try {
     // Find the note by ID
@@ -78,38 +79,35 @@ exports.updateAndCreateNoteCollaborators = async (req, res) => {
       return res.status(404).json({ message: "Note not found" });
     }
 
-    const isOwner = note.owner.toString() === req.user.id;
+    const isOwner = note.owner.toString() === collabId;
     const isCollaborator = await Collaborator.findOne({
       noteId,
       ownerId: note.owner,
-      collaboratorId: req.user.id,
+      collaboratorId: collaboratorId ? collaboratorId : collabId,
     });
 
     if (isOwner || isCollaborator) {
-      return res
-        .status(200)
-        .json({
-          data: { note, collaborator: isCollaborator },
-          message: "User already a collaborator or owner",
-        });
+      return res.status(200).json({
+        data: { note, collaborator: isCollaborator },
+        message: "User already a collaborator or owner",
+      });
     }
 
     const newCollaborator = await Collaborator.create({
       noteId,
       ownerId: note.owner,
-      collaboratorId: req.user.id,
+      collaboratorId: collabId,
+      permission: permission ? permission : "view",
     });
     newCollaborator.save();
 
     note.collaborators.push(newCollaborator._id);
 
     await note.save();
-    res
-      .status(200)
-      .json({
-        data: { note, collaborator: newCollaborator },
-        message: "Collaborator added successfully",
-      });
+    res.status(200).json({
+      data: { note, collaborator: newCollaborator },
+      message: "Collaborator added successfully",
+    });
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Internal server error", error });
@@ -175,6 +173,27 @@ exports.getNotesByUserId = async (req, res) => {
     const note = await Notes.find({ owner: userId });
 
     res.status(200).json({ data: note });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json(error);
+  }
+};
+
+exports.getNotesByCollaboratorId = async (req, res) => {
+  const { collaboratorId } = req.params;
+  try {
+    const collaborators = await Collaborator.find({
+      collaboratorId: collaboratorId,
+    });
+
+    const notes = await Promise.all(
+      collaborators.map(async (collaborator) => {
+        const note = await Notes.findOne({ _id: collaborator.noteId });
+        return { ...note.toObject(), permission: collaborator.permission };
+      })
+    );
+
+    res.status(200).json({ data: notes });
   } catch (error) {
     console.error(error.message);
     res.status(500).json(error);
