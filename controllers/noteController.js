@@ -199,3 +199,90 @@ exports.getNotesByCollaboratorId = async (req, res) => {
     res.status(500).json(error);
   }
 };
+
+exports.updateTheCollaboratorContent = async (req, res) => {
+  const { collaboratorId } = req.params;
+
+  try {
+    // Find the collaborator by the provided collaboratorId
+    const collaborator = await Collaborator.findOne({
+      collaboratorId: collaboratorId,
+    });
+
+    if (!collaborator) {
+      return res.status(404).json({ message: "Collaborator not found" });
+    }
+
+    // Update the collaborator's content
+    const updatedCollaborator = await Collaborator.findOneAndUpdate(
+      { collaboratorId: collaboratorId },
+      {
+        collaboratorContent: req.body.collaboratorContent
+          ? req.body.collaboratorContent
+          : collaborator.collaboratorContent,
+        permission: req.body.permission
+          ? req.body.permission
+          : collaborator.permission,
+      },
+      { new: true } // Return the updated document
+    );
+
+    console.log("Updated collaborator:", updatedCollaborator);
+
+    res.status(200).json({ data: updatedCollaborator });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Internal Server Error" });
+  }
+};
+
+exports.removeNoteCollaborators = async (req, res) => {
+  const { noteId, collaboratorId } = req.params;
+
+  try {
+    // Find the note by ID
+    const note = await Notes.findOne({ _id: noteId });
+    if (!note) {
+      return res.status(404).json({ message: "Note not found" });
+    }
+
+    // Ensure the collaborator exists in this note
+    const collaborator = await Collaborator.findOne({
+      noteId: noteId,
+      collaboratorId: collaboratorId,
+    });
+
+    if (!collaborator) {
+      return res.status(404).json({ message: "Collaborator not found" });
+    }
+
+    // Check if the requester is the owner or the collaborator
+    const isOwner = note.owner.toString() === req.user.id.toString();
+    const isCollaborator =
+      collaborator.collaboratorId.toString() === req.user.id.toString();
+
+    if (!isOwner && !isCollaborator) {
+      return res
+        .status(403)
+        .json({ message: "Unauthorized to remove collaborator" });
+    }
+
+    // Remove collaborator from note's collaborator list
+    note.collaborators = note.collaborators.filter(
+      (id) => id.toString() !== collaborator._id.toString()
+    );
+
+    // Save the updated note
+    await note.save();
+
+    // Delete the collaborator record
+    await Collaborator.findByIdAndDelete(collaborator._id);
+
+    res
+      .status(200)
+      .json({ message: "Collaborator removed successfully", data: note });
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ message: "Internal server error", error });
+  }
+};

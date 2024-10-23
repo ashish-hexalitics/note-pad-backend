@@ -25,65 +25,87 @@ let collaborators = {}; // Store active viewers per noteId
 
 // When a user connects
 io.on("connection", (socket) => {
-  console.log("New client connected");
+  console.log(socket.id, "New client connected");
+
+  let onlineUsers = [];
+  let messagging = [];
 
   socket.on("joinNote", async ({ noteId, user }) => {
-    console.log('aya')
+    user._id &&
+      !onlineUsers.some((u) => u._id === user._id) &&
+      onlineUsers.push({
+        ...user,
+        noteId,
+        isOnline: true,
+        socketId: socket.id,
+      });
+    const noteResponse = await fetch(
+      `http://localhost:8000/api/notes/${noteId}`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${user.token}`,
+        },
+      }
+    );
+    const collaborators = await noteResponse.json();
+
+    io.emit("sentJoinedUsers", { collaborators, onlineUsers });
+  });
+
+  socket.on("updateNoteContent", async (data) => {
+    // Check if user is not already in the 'messagging' list and add them
+    if (data._id && !messagging.some((u) => u.userId === data._id)) {
+      messagging.push({
+        message: `${data.name} is editing notes`,
+        userId: data._id,
+        content: data.content,
+        noteId: data.noteId,
+      });
+    }
+
     try {
-      // Call the API to add the user as a collaborator
-      const addCollaboratorResponse = await fetch(
-        `http://localhost:8000/api/notes/collaborators/${noteId}`,
+      // Send collaborator content to backend for update
+      const collaboratorResponse = await fetch(
+        `http://localhost:8000/api/notes/collaborators/${data._id}`,
         {
-          method: "POST",
+          method: "PUT",
+          body: JSON.stringify({ collaboratorContent: data.content }), // Properly format the body
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${user.token}`,
+            Authorization: `Bearer ${data.token}`, // Include the authorization token
           },
         }
       );
 
-      const addCollaboratorResult = await addCollaboratorResponse.json();
-
-      if (addCollaboratorResponse.ok) {
-        // Fetch the updated note with its collaborators
-        const noteResponse = await fetch(
-          `http://localhost:8000/api/notes/${noteId}`,
-          {
-            method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${user.token}`,
-            },
-          }
-        );
-
-        const noteResult = await noteResponse.json();
-
-        if (noteResponse.ok) {
-          // Emit the updated note's collaborators to all users in the room
-          io.to(noteId).emit("updateCollaborators", noteResult);
-          // Join the user to the room specific to the note
-        //   socket.broadcast.emit("updateCollaborators", noteResult);
-          socket.join(noteId);
-          console.log(`${user.name} joined note: ${noteId}`);
-        } else {
-          console.log("Error fetching note details:", noteResult.message);
-        }
-      } else {
-        console.log(
-          "Error adding collaborator:",
-          addCollaboratorResult.message
-        );
+      if (!collaboratorResponse.ok) {
+        throw new Error("Failed to update collaborator content");
       }
-    } catch (error) {
-      console.error("Error while adding collaborator:", error.message);
-    }
-  });
 
-  socket.on('updateNoteContent', ({data}) => {
-    const noteId = data._id
-    io.to(noteId).emit('noteContentUpdated', { data });
-    socket.join(noteId);
+      // Fetch the updated collaborators
+      const noteResponse = await fetch(
+        `http://localhost:8000/api/notes/${data.noteId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${data.token}`, // Include the authorization token
+          },
+        }
+      );
+
+      if (!noteResponse.ok) {
+        throw new Error("Failed to fetch updated note data");
+      }
+
+      const collaborators = await noteResponse.json();
+
+      // Emit updated note content and collaborators to all clients
+      io.emit("noteContentUpdated", { messagging, collaborators });
+    } catch (error) {
+      console.error("Error updating note content:", error.message);
+    }
   });
 
   // Handle user disconnect

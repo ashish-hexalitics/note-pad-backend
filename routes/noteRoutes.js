@@ -19,6 +19,18 @@ router.post(
   notesController.updateAndCreateNoteCollaborators
 );
 
+router.delete(
+  "/collaborators/:noteId/:collaboratorId",
+  authMiddleware,
+  notesController.removeNoteCollaborators
+);
+
+router.put(
+  "/collaborators/:collaboratorId",
+  authMiddleware,
+  notesController.updateTheCollaboratorContent
+);
+
 // Update a note collaborators
 router.delete("/:noteId", authMiddleware, notesController.deleteNote); // Delete a note
 

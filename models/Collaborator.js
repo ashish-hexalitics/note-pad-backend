@@ -4,26 +4,29 @@ const { Schema } = mongoose;
 const collaboratorSchema = new Schema(
   {
     noteId: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
     ownerId: {
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    collaboratorContent: {
+      type: String,
+    },
     collaboratorId: {
-        type: Schema.Types.ObjectId,
-        ref: "User",
-      },
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
     permission: {
       type: String,
-      enum: ['edit', 'delete', 'view'],
-      default:'view'
+      enum: ["edit", "delete", "view"],
+      default: "view",
     },
     status: {
       type: String,
-      enum: ['pending', 'accept'],
-      default:'pending'
+      enum: ["pending", "accept"],
+      default: "pending",
     },
   },
   { timestamps: true }
