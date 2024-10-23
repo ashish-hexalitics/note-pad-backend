@@ -169,8 +169,16 @@ exports.deleteNote = async (req, res) => {
 // Get a note by ID
 exports.getNotesByUserId = async (req, res) => {
   const { userId } = req.params;
+  const { search } = req.query;
   try {
-    const note = await Notes.find({ owner: userId });
+    const filter = { owner: userId };
+    if (search) {
+      filter.$or = [
+        { title: { $regex: search, $options: "i" } }, 
+        { content: { $regex: search, $options: "i" } },
+      ];
+    }
+    const note = await Notes.find(filter);
 
     res.status(200).json({ data: note });
   } catch (error) {
@@ -227,8 +235,6 @@ exports.updateTheCollaboratorContent = async (req, res) => {
       { new: true } // Return the updated document
     );
 
-    console.log("Updated collaborator:", updatedCollaborator);
-
     res.status(200).json({ data: updatedCollaborator });
   } catch (error) {
     console.error(error.message);
@@ -284,5 +290,44 @@ exports.removeNoteCollaborators = async (req, res) => {
   } catch (error) {
     console.error(error.message);
     res.status(500).json({ message: "Internal server error", error });
+  }
+};
+
+exports.checkPermission = async (req, res) => {
+  const { noteId } = req.params;
+  const userId = req.user.id;
+
+  try {
+    // First, check if the user is the owner of the note
+    const note = await Notes.findOne({ _id: noteId});
+
+    if (note.owner.toString()===req.user.id) {
+      return res.status(200).json({
+        message: "Owner",
+        permission: "edit",
+      });
+    }
+
+    // If not the owner, check if they are a collaborator with certain permissions
+    const collaborator = await Collaborator.findOne({
+      noteId,
+      collaboratorId: userId,
+    });
+
+    if (!collaborator) {
+      return res.status(403).json({
+        message: "No permission",
+        permission: "view",
+      });
+    }
+
+    // If the user is a collaborator, return their permission level
+    res.status(200).json({
+      message: "Collaborator",
+      permission: collaborator.permission,
+    });
+  } catch (error) {
+    console.error("Error checking permission:", error.message);
+    res.status(500).json({ error: "Internal server error" });
   }
 };

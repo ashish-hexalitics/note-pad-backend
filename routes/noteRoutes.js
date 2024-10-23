@@ -31,6 +31,12 @@ router.put(
   notesController.updateTheCollaboratorContent
 );
 
+router.post(
+  "/permission/:noteId",
+  authMiddleware,
+  notesController.checkPermission
+);
+
 // Update a note collaborators
 router.delete("/:noteId", authMiddleware, notesController.deleteNote); // Delete a note
 

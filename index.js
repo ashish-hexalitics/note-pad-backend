@@ -31,85 +31,102 @@ io.on("connection", (socket) => {
   let messagging = [];
 
   socket.on("joinNote", async ({ noteId, user }) => {
-    user._id &&
-      !onlineUsers.some((u) => u._id === user._id) &&
+    socket.join(noteId); // Join the room for this note
+    if (user._id && !onlineUsers.some((u) => u._id === user._id)) {
       onlineUsers.push({
         ...user,
         noteId,
         isOnline: true,
         socketId: socket.id,
       });
-    const noteResponse = await fetch(
-      `http://localhost:8000/api/notes/${noteId}`,
-      {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${user.token}`,
-        },
-      }
-    );
-    const collaborators = await noteResponse.json();
+    }
 
-    io.emit("sentJoinedUsers", { collaborators, onlineUsers });
+    try {
+      const noteResponse = await fetch(
+        `http://localhost:8000/api/notes/${noteId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${user.token}`,
+          },
+        }
+      );
+
+      if (!noteResponse.ok) throw new Error("Failed to fetch note data");
+
+      const collaborators = await noteResponse.json();
+      io.to(noteId).emit("sentJoinedUsers", { collaborators, onlineUsers }); // Emit only to this note room
+    } catch (error) {
+      console.error("Error fetching note:", error.message);
+    }
   });
 
   socket.on("updateNoteContent", async (data) => {
-    // Check if user is not already in the 'messagging' list and add them
-    if (data._id && !messagging.some((u) => u.userId === data._id)) {
+    if (!data._id || !data.content || !data.noteId || !data.token) {
+      console.error("Invalid data received for note update");
+      return;
+    }
+
+    if (!messagging.some((u) => u.userId === data._id)) {
       messagging.push({
         message: `${data.name} is editing notes`,
         userId: data._id,
+        name: data.name,
         content: data.content,
         noteId: data.noteId,
       });
     }
 
     try {
-      // Send collaborator content to backend for update
       const collaboratorResponse = await fetch(
         `http://localhost:8000/api/notes/collaborators/${data._id}`,
         {
           method: "PUT",
-          body: JSON.stringify({ collaboratorContent: data.content }), // Properly format the body
+          body: JSON.stringify({ collaboratorContent: data.content }),
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${data.token}`, // Include the authorization token
+            Authorization: `Bearer ${data.token}`,
           },
         }
       );
 
-      if (!collaboratorResponse.ok) {
+      if (!collaboratorResponse.ok)
         throw new Error("Failed to update collaborator content");
-      }
 
-      // Fetch the updated collaborators
       const noteResponse = await fetch(
         `http://localhost:8000/api/notes/${data.noteId}`,
         {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${data.token}`, // Include the authorization token
+            Authorization: `Bearer ${data.token}`,
           },
         }
       );
 
-      if (!noteResponse.ok) {
+      if (!noteResponse.ok)
         throw new Error("Failed to fetch updated note data");
-      }
 
       const collaborators = await noteResponse.json();
-
-      // Emit updated note content and collaborators to all clients
-      io.emit("noteContentUpdated", { messagging, collaborators });
+      io.to(data.noteId).emit("noteContentUpdated", {
+        messagging,
+        collaborators,
+        currentContent: data.content,
+      });
     } catch (error) {
       console.error("Error updating note content:", error.message);
     }
   });
 
-  // Handle user disconnect
+  socket.on("resetMesseging", () => {
+    messagging = [];
+    io.emit("resetMessegSuccess", messagging);
+  });
+
   socket.on("disconnect", () => {
+    onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
+    io.emit("sentJoinedUsers", { onlineUsers }); // Update others on the user disconnect
     console.log("Client disconnected");
   });
 });
