@@ -90,6 +90,7 @@ exports.updateAndCreateNoteCollaborators = async (req, res) => {
       return res.status(200).json({
         data: { note, collaborator: isCollaborator },
         message: "User already a collaborator or owner",
+        status: "error",
       });
     }
 
@@ -107,6 +108,7 @@ exports.updateAndCreateNoteCollaborators = async (req, res) => {
     res.status(200).json({
       data: { note, collaborator: newCollaborator },
       message: "Collaborator added successfully",
+      status: "success",
     });
   } catch (error) {
     console.error(error.message);
@@ -174,7 +176,7 @@ exports.getNotesByUserId = async (req, res) => {
     const filter = { owner: userId };
     if (search) {
       filter.$or = [
-        { title: { $regex: search, $options: "i" } }, 
+        { title: { $regex: search, $options: "i" } },
         { content: { $regex: search, $options: "i" } },
       ];
     }
@@ -299,9 +301,9 @@ exports.checkPermission = async (req, res) => {
 
   try {
     // First, check if the user is the owner of the note
-    const note = await Notes.findOne({ _id: noteId});
+    const note = await Notes.findOne({ _id: noteId });
 
-    if (note.owner.toString()===req.user.id) {
+    if (note.owner.toString() === req.user.id) {
       return res.status(200).json({
         message: "Owner",
         permission: "edit",
