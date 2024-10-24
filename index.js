@@ -124,10 +124,15 @@ io.on("connection", (socket) => {
     io.emit("resetMessegSuccess", messagging);
   });
 
-  socket.on("removeCollaborators",(collaboratorId)=>{
+  socket.on("removeCollaborators", (collaboratorId) => {
     io.emit("removeCollaboratorsSuccess", collaboratorId);
-  })
+  });
 
+  socket.on("updateCollaboratorPermission", (data) => {
+    const { permission, collaboratorId } = data;
+    io.emit("updatedCollaboratorPermission", { permission, collaboratorId });
+  });
+  
   socket.on("disconnect", () => {
     onlineUsers = onlineUsers.filter((user) => user.socketId !== socket.id);
     io.emit("sentJoinedUsers", { onlineUsers }); // Update others on the user disconnect
